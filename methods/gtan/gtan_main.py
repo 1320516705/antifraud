@@ -17,6 +17,7 @@ from torch.optim.lr_scheduler import MultiStepLR
 from .gtan_model import GraphAttnModel
 from . import *
 from methods.gtan.my_add import combine_local_and_global_features
+from methods.gtan.my_add import *
 
 # gtan_main(feat_data, g, train_idx, test_idx, labels, args, cat_features)
 def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features):  # feat_df = ={DataFrame:(77881,126)是节点特征，labels = {Tensor:(77881,)}是标签，train_idx = {list: 62304}是训练集索引，test_idx = {list: 15577}是测试集索引，g是图，cat_features = {list: 3} ['Target', 'Location', 'Type' ]
@@ -37,6 +38,10 @@ def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features): 
     y = labels  # y= {Series: (77881,)}
     labels = torch.from_numpy(y.values).long().to(device)  # labels = {Tensor:(77881,)}
     loss_fn = nn.CrossEntropyLoss().to(device)
+    # my_model = GCNLayer(in_feats=feat_df.shape[1], out_feats=feat_df.shape[1])
+    # new_num_feat = my_model(graph, num_feat)
+    # num_feat = num_feat + new_num_feat;
+
     for fold, (trn_idx, val_idx) in enumerate(kfold.split(feat_df.iloc[train_idx], y_target)):  # trn idx = {ndarray:(49843,)},val idx = ndarray:(12461,)}。①enumerate()是Python内置函数，它将一个可迭代对象（如列表、元组等）组合为一个枚举对象；②返回该折叠的索引fold和对于每折的训练和验证的样本索引trn idx = {ndarray:(49843,)}和val_idx
         print(f'Training fold {fold + 1}')
         trn_ind, val_ind = torch.from_numpy(np.array(train_idx)[trn_idx]).long().to(  # 转成张量形式的索引，本质上还是索引
@@ -111,7 +116,7 @@ def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features): 
                 # batch_labels = {Tensor: (128,)}，一个batch的“种子节点”对应的“标签”
                 batch_inputs, batch_work_inputs, batch_labels, lpa_labels = load_lpa_subtensor(num_feat, cat_feat, labels,  # 此函数通过筛选和预处理，为图上的节点特征和标签数据创建了一个子集，适合于进行局部的标签传播算法迭代或图神经网络的小批量训练
                                                                                                seeds, input_nodes, device)
-
+                centrality(graph)
                 # 获取全局位置编码
                 global_pos_enc_batch = graph.ndata['centrality'][input_nodes]
                 # print("batch_inputs.shape********",batch_inputs.shape)

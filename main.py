@@ -41,9 +41,11 @@ def parse_args():
         raise NotImplementedError("Unsupported method.")
 
     # config = Config().get_config()
-    with open(yaml_file) as file:
+    with open(yaml_file, 'r', encoding='utf-8') as file:
         args = yaml.safe_load(file)
     args['method'] = method
+    # with open(config_file_path, 'r', encoding='utf-8') as file:
+    #         args = yaml.safe_load(file)
     return args
 
 

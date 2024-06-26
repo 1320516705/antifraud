@@ -2,17 +2,17 @@ batch_size: 128
 hid_dim: 256
 lr: 0.003
 wd: !!float 1e-4
-n_layers: 2 # 指定了采样的层数，即考虑节点的多层邻居。
+n_layers: 2
 dropout: [0.2, 0.1]
 device: "cpu"
 #device: "cuda:0"
 early_stopping: 10
 n_fold: 5
 seed: 2023
-max_epochs: 1
-#max_epochs: 15
+#max_epochs: 2
+max_epochs: 15
 gated: True
-dataset: S-FFSD
-# dataset: yelp
-# dataset: amazon
+#dataset: S-FFSD
+dataset: yelp
+#dataset: amazon
 test_size: 0.4

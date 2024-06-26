@@ -6,9 +6,6 @@ from dgl import function as fn
 from dgl.base import DGLError
 from dgl.nn.functional import edge_softmax
 import numpy as np
-
-from methods.gtan.my_add import MultiScaleMessagePassing
-
 cat_features = ["Target",
                 "Type",
                 "Location"]
@@ -48,9 +45,7 @@ class PosEncoding(nn.Module):
             x = pos / self.base + self.sft
             return torch.sin(x)
 
-"""
-# 将处理后的3种“类别特征”的值相加
-"""
+
 class TransEmbedding(nn.Module):
 
     # self.n2v_mlp = TransEmbedding(ref_df, device=device, in_feats=in_feats, cat_features=cat_features)=>df=ref_df
@@ -66,7 +61,7 @@ class TransEmbedding(nn.Module):
         """
         super(TransEmbedding, self).__init__()
         self.time_pe = PosEncoding(dim=in_feats, device=device, base=100)  # 为模型创建一个位置编码（Positional Encoding）模块
-        # time_emb = time_pe(torch.sin(torch.tensor(df['time_span'].values)/86400*torch.pi))
+        #time_emb = time_pe(torch.sin(torch.tensor(df['time_span'].values)/86400*torch.pi))
         self.cat_table = nn.ModuleDict({col: nn.Embedding(max(df[col].unique(  # 对于每个分类特征列，创建一个nn.Embedding，嵌入维度为in_feats，词汇表大小为该列中唯一值的最大值加1,这些嵌入层被存储在cat_table字典中
         ))+1, in_feats).to(device) for col in cat_features if col not in {"Labels", "Time"}})
         self.label_table = nn.Embedding(3, in_feats, padding_idx=2).to(device)  # 嵌入维度为in_feats，词汇表大小为3，并指定padding_idx=2（即索引为2的嵌入向量将被用作填充标记）
@@ -98,9 +93,7 @@ class TransEmbedding(nn.Module):
             output = output + support[k]  # output ={Tensor:(2321,126)}->output ={Tensor:(2321,126)},也就是将指定特征列的向量相加
         return output  # output ={Tensor:(2321,126)}
 
-""" 
-完成 1、位置注意力的a；2、邻居节点聚合信息；3、门控机制处理变化后的特征与原特征
-"""
+
 class TransformerConv(nn.Module):
 
     def __init__(self,
@@ -203,18 +196,19 @@ class TransformerConv(nn.Module):
         v_src = self.lin_value(h_src).view(-1, self._num_heads, self._out_feats)  # v src={Tensor:(2321, 4, 64)}
 
         # Assign features to nodes
-        # 更新图中源节点的特征数据，将源节点的 查询向量q_src和值向量v_src 存储在名为 'ft' 和 'ft_v' 的特征字段中
+        # 更新图中源节点的特征数据，将源节点的特征 q_src 和 v_src 存储在名为 'ft' 和 'ft_v' 的特征字段中
         graph.srcdata.update({'ft': q_src, 'ft_v': v_src})
-        # 更新图中目标节点的特征数据，将目标节点的 键向量k_dst存储到图的目标节点数据属性ft中
+        # 更新图中目标节点的特征数据，将目标节点的特征 k_dst 存储在名为 'ft' 的特征字段中
         graph.dstdata.update({'ft': k_dst})
 
-        # 计算每条边两端节点（源节点和目标节点）特征的点积，并将结果存储在边的数据属性a中，作为原始的注意力对齐得分
-        graph.apply_edges(fn.u_dot_v('ft', 'ft', 'a'))
+        # Step 1. dot product
+        graph.apply_edges(fn.u_dot_v('ft', 'ft', 'a'))  # 对图中的每条边， 计算每条边连接的两个节点特征的点积。存储结果在边的数据属性 'a' 中,这代表了原始的注意力相关度量
 # 公式3
         # Step 2. edge softmax 去计算注意力分数，公式3
         # **用于执行幂运算
-        # 再对边的原始注意力得分除以特征维度的平方根进行缩放，然后应用softmax函数，得到归一化的注意力权重，存储在边的数据属性sa中。
-        graph.edata['sa'] = edge_softmax(graph, graph.edata['a'] / self._out_feats**0.5)
+        # 再将a归一化后，更新边属性【graph.edata['sa']】
+        graph.edata['sa'] = edge_softmax(graph, graph.edata['a'] / self._out_feats**0.5)# graph.edata['a'] / self._out_feats**0.5 这部分代码实际上是对边的得分进行归一化处理
+
         # Step 3. 对图中的所有节点进行更新操作。更新操作由两个函数组成
         graph.update_all(fn.u_mul_e('ft_v', 'sa', 'attn'),  # 表示将节点上的特征ft_v与节点邻接边的特征sa做乘法，结果存储在节点的属性attn中
                          fn.sum('attn', 'agg_u'))  # 表示对节点上的attn属性进行汇总求和，结果存储在节点的属性agg_u中
@@ -222,7 +216,7 @@ class TransformerConv(nn.Module):
         # 在消息传递的过程中，每个源节点向其邻居（目标节点）发送信息，聚合操作（如 fn.sum）是在目标节点上进行的。这意味着，目标节点从其所有邻居（源节点）接收信息并将其聚合
         # rst = {Tensor: (681,256)}是聚合特征
         rst = graph.dstdata['agg_u'].reshape(-1,self._out_feats*self._num_heads)  # 第二维：每个特征向量的长度*头的数量
-# 公式4,将聚合特征与原始特征 通过门控机制 进行拼接，然后通过一个线性层进行变换，得到最终的输出特征。
+# 公式4
         if self.skip_feat is not None:  # skip_feat=True
             skip_feat = self.skip_feat(feat[:graph.number_of_dst_nodes()])  # skip_feat = {Tensor: (681,256)}提取前 `graph.number_of_dst_nodes()` 个节点的特征，记为 `skip_feat`
             if self.gate is not None:
@@ -354,8 +348,7 @@ class GraphAttnModel(nn.Module):
         else:
             self.layers.append(nn.Linear(self.hidden_dim *
                                self.heads[-1], self.n_classes))
-        # layers:7
-        self.multiScaleMessagePassing = MultiScaleMessagePassing(in_feats=self.hidden_dim * self.heads[-1], out_feats=self.hidden_dim * self.heads[-1],  num_heads=4)
+
     # 调用代码：train_batch_logits = model(blocks, batch_inputs, lpa_labels, batch_work_inputs)
     # ①blocks =  { list:2[Block(num src nodes=2321, num dst nodes=681, num edges=7506), Block(num src nodes=681, num dst nodes=128.,num edges=1408)]；
     # ②features ={Tensor:(2321,126)}；“数字特征”
@@ -373,22 +366,20 @@ class GraphAttnModel(nn.Module):
             h = features
         else:# n2v_feat = {dict: 3} {'Target': tensor([238,8,0,...,15,0,0]),'Location':tensor([2,0,0,.12,12,0]),'Type': tensor([33,5,0,...,10, 0, 0])}
             h = self.n2v_mlp(n2v_feat)  # h ={Tensor:(2321,126)}，处理了3个“类别特征”，具体就是将其各自embedding之后在对应相加，合并成一个h。
-# 1、h ={Tensor:(2321,126)}，这步是将“数字特征”和“n2v类别特征”相加，得到一个h。
-            h = features + h
-            # labels = {Tensor: (2321,)}
+            h = features + h  # h ={Tensor:(2321,126)}，这步是将“数字特征”和“n2v类别特征”相加，得到一个h。
+# labels = {Tensor: (2321,)}
         label_embed = self.input_drop(self.layers[0](labels))  # label_embed{Tensor: (2321,126)}
 
-# 2、这步是将【数字特征和n2v类别特征合并后的特征】与【标签特征】相加，label_embed{Tensor: (2321,256)}
+        # 这步是将【数字特征和n2v类别特征合并后的特征】与【标签特征】相加，label_embed{Tensor: (2321,256)}
         label_embed = self.layers[1](h) + self.layers[2](label_embed)
         label_embed = self.layers[3](label_embed)  # label_embed{Tensor: (2321,126)}
         h = h + label_embed  # label embed ={Tensor:(2321,126)};h ={Tensor:(2321,126)} 是标签传播步骤
 
-# 3、完成 1、位置注意力的a；2、邻居节点聚合信息；3、门控机制处理变化后的特征与原特征
         # l会取 0 和 1
         for l in range(self.n_layers):  # n_layers: 2
             # 针对的是GraphAttnModel中的（4）和（5），观测可以发现，每次传入的h是上一次更新后的h，所以（4）和（5），即2个TransformerConv是串行的，且下一个的输入是上一个的输出
             h = self.output_drop(self.layers[l+4](blocks[l], h))  # h ={Tensor:(2321,126)} => h = {Tensor: (681,256)}
-        h = self.multiScaleMessagePassing(blocks[l],h)
+
         # 走GraphAttnModel中的（6），5个子层达到的效果：256->2
         logits = self.layers[-1](h)
 
