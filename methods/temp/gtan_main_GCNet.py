@@ -11,10 +11,11 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 import torch.nn as nn
 from sklearn.preprocessing import LabelEncoder, QuantileTransformer
 from dgl.dataloading import MultiLayerFullNeighborSampler
+# from dgl.dataloading import NodeDataLoader
 from dgl.dataloading import DataLoader as NodeDataLoader
 from torch.optim.lr_scheduler import MultiStepLR
-from .gtan_model import GraphAttnModel
 from . import *
+
 
 
 def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features):
@@ -41,6 +42,7 @@ def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features):
             device), torch.from_numpy(np.array(train_idx)[val_idx]).long().to(device)
 
         train_sampler = MultiLayerFullNeighborSampler(args['n_layers'])
+        # train_dataloader = dgl.dataloading.NodeDataLoader(graph,
         train_dataloader = NodeDataLoader(graph,
                                           trn_ind,
                                           train_sampler,
@@ -52,6 +54,7 @@ def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features):
                                           num_workers=0
                                           )
         val_sampler = MultiLayerFullNeighborSampler(args['n_layers'])
+        # val_dataloader = dgl.dataloading.NodeDataLoader(graph,
         val_dataloader = NodeDataLoader(graph,
                                         val_ind,
                                         val_sampler,
@@ -177,6 +180,7 @@ def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features):
         print("Best val_loss is: {:.7f}".format(earlystoper.best_cv))
         test_ind = torch.from_numpy(np.array(test_idx)).long().to(device)
         test_sampler = MultiLayerFullNeighborSampler(args['n_layers'])
+        # test_dataloader = dgl.dataloading.NodeDataLoader(graph,
         test_dataloader = NodeDataLoader(graph,
                                          test_ind,
                                          test_sampler,
@@ -238,8 +242,8 @@ def load_gtan_data(dataset: str, test_size: float):
         cat_features = ["Target", "Location", "Type"]
 
         df = pd.read_csv(prefix + "S-FFSDneofull.csv")
-        df = df.loc[:, ~df.columns.str.contains('Unnamed')]
-        data = df[df["Labels"] <= 2]
+        df = df.loc[:, ~df.columns.str.contains('Unnamed')]  # 使用正则表达式判断列名是否包含'Unnamed'，返回一个布尔型的Series，其中True表示列名不包含'Unnamed'，False表示列名包含'Unnamed'
+        data = df[df["Labels"] <= 2]  # 筛选df数据框中Labels列值小于等于2的行
         data = data.reset_index(drop=True)
         out = []
         alls = []
@@ -248,9 +252,9 @@ def load_gtan_data(dataset: str, test_size: float):
         for column in pair:
             src, tgt = [], []
             edge_per_trans = 3
-            for c_id, c_df in data.groupby(column):
-                c_df = c_df.sort_values(by="Time")
-                df_len = len(c_df)
+            for c_id, c_df in data.groupby(column):  # 当column为"Source"时，c_id是每个分组的"Source"列的具体值
+                c_df = c_df.sort_values(by="Time")  # 按照"Time"这一列的值从小到大排序
+                df_len = len(c_df)  # c_df是2列数据框，df_len是c_df的行数
                 sorted_idxs = c_df.index
                 src.extend([sorted_idxs[i] for i in range(df_len)
                             for j in range(edge_per_trans) if i + j < df_len])

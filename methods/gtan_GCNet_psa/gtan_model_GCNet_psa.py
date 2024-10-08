@@ -1,11 +1,13 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
 from dgl.utils import expand_as_pair
 from dgl import function as fn
 from dgl.base import DGLError
 from dgl.nn.functional import edge_softmax
 import numpy as np
+from methods.gtan.my_add import GlobalContextBlock
+from methods.gtan_psa.my_add import GTANWithPSA
+
 cat_features = ["Target",
                 "Type",
                 "Location"]
@@ -71,6 +73,14 @@ class TransEmbedding(nn.Module):
         self.forward_mlp = nn.ModuleList(
             [nn.Linear(in_feats, in_feats) for i in range(len(cat_features))])
         self.dropout = nn.Dropout(dropout)
+        self.global_context_blocks = nn.ModuleDict({
+            'Target': GlobalContextBlock(inplanes=126, ratio=0.5, pooling_type='att',
+                                         fusion_types=('channel_mul', 'channel_add')),
+            'Location': GlobalContextBlock(inplanes=126, ratio=0.5, pooling_type='att',
+                                           fusion_types=('channel_mul', 'channel_add')),
+            'Type': GlobalContextBlock(inplanes=126, ratio=0.5, pooling_type='att',
+                                       fusion_types=('channel_mul', 'channel_add')),
+        })
 
     def forward_emb(self, df):
         if self.emb_dict is None:
@@ -92,6 +102,10 @@ class TransEmbedding(nn.Module):
             #    print(df[k].shape)
             support[k] = self.dropout(support[k])
             support[k] = self.forward_mlp[i](support[k])
+
+            # 将特征通过GlobalContextBlock处理
+            support[k] = self.global_context_blocks[k](support[k].unsqueeze(0)).squeeze(0)
+
             output = output + support[k]
         return output
 
@@ -230,7 +244,40 @@ class TransformerConv(nn.Module):
         else:
             return rst
 
-
+    # def forward(self, graph, feat, get_attention=False):
+    #
+    #     graph = graph.local_var()
+    #     h_src = feat
+    #     h_dst = h_src[:graph.number_of_dst_nodes()]
+    #
+    #     # Step 0. q, k, v
+    #     q_src = self.lin_query(h_src).view(-1, self._num_heads, self._out_feats)
+    #     k_dst = self.lin_key(h_dst).view(-1, self._num_heads, self._out_feats)
+    #     v_src = self.lin_value(h_src).view(-1, self._num_heads, self._out_feats)
+    #     # Assign features to nodes
+    #     graph.srcdata.update({'ft': q_src, 'ft_v': v_src})
+    #     graph.dstdata.update({'ft': k_dst})
+    #     # Step 1. dot product
+    #     graph.apply_edges(fn.u_dot_v('ft', 'ft', 'a'))
+    #
+    #     # Step 2. edge softmax to compute attention scores
+    #     graph.edata['sa'] = edge_softmax(
+    #         graph, graph.edata['a'] / self._out_feats**0.5)
+    #
+    #     # Step 3. Broadcast softmax value to each edge, and aggregate dst node
+    #     graph.update_all(fn.u_mul_e('ft_v', 'sa', 'attn'),
+    #                      fn.sum('attn', 'agg_u'))
+    #
+    #     # output results to the destination nodes
+    #     rst = graph.dstdata['agg_u'].reshape(-1,self._out_feats*self._num_heads)
+    #
+    #     skip_feat = self.skip_feat(feat[:graph.number_of_dst_nodes()])
+    #     gate = torch.sigmoid(
+    #         self.gate(torch.concat([skip_feat, rst, skip_feat - rst], dim=-1)))
+    #     rst = gate * skip_feat + (1 - gate) * rst
+    #     rst = self.layer_norm(rst)
+    #     rst = self.activation(rst)
+    #     return rst
 class GraphAttnModel(nn.Module):
     def __init__(self,
                  in_feats,
@@ -328,7 +375,8 @@ class GraphAttnModel(nn.Module):
         else:
             self.layers.append(nn.Linear(self.hidden_dim *
                                self.heads[-1], self.n_classes))
-
+        self.psa = GTANWithPSA(self.hidden_dim * self.heads[-1], self.hidden_dim * self.heads[-1])
+    # train_batch_logits = model(blocks, batch_inputs, lpa_labels, batch_work_inputs)
     def forward(self, blocks, features, labels, n2v_feat=None):
         """
         :param blocks: train blocks
@@ -347,10 +395,18 @@ class GraphAttnModel(nn.Module):
         label_embed = self.layers[1](h) + self.layers[2](label_embed)
         label_embed = self.layers[3](label_embed)
         h = h + label_embed  # residual
+        # print("*********h.shape***********")
+        # print(h.shape)  # h[11944, 25]
+
+        # h = self.restore_dim(h)
 
         for l in range(self.n_layers):
-            h = self.output_drop(self.layers[l+4](blocks[l], h))
-
+            h = self.output_drop(self.layers[l+4](blocks[l], h))  # h:torch.Size([128, 256])
+        # print("*********gtan_model_psa:h.shape***********")
+        # print(h.shape)
+        h = self.psa(h)
+        # print("*********最后h.shape***********")
+        # print(h.shape)
         logits = self.layers[-1](h)
 
         return logits

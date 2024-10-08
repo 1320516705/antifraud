@@ -237,10 +237,49 @@ class SKConv(nn.Module):
         return fea_v
 
 
-if __name__ == "__main__":
-    x = torch.randn(16, 64, 256, 256)
-    sk = SKConv(in_ch=64, M=3, G=1, r=2)
-    out = sk(x)
-    print("输入特征张量的形状:", x.shape)
-    print("输出特征张量的形状:", out.shape)
-    # in_ch 数据输入维度，M为分指数，G为Conv2d层的组数，基本设置为1，r用来进行求线性层输出通道的。
+# if __name__ == "__main__":
+#     x = torch.randn(16, 64, 256, 256)
+#     sk = SKConv(in_ch=64, M=3, G=1, r=2)
+#     out = sk(x)
+#     print("输入特征张量的形状:", x.shape)
+#     print("输出特征张量的形状:", out.shape)
+#     # in_ch 数据输入维度，M为分指数，G为Conv2d层的组数，基本设置为1，r用来进行求线性层输出通道的。
+
+class PSA_GNN(nn.Module):
+    def __init__(self, feature_dim=126, reduction=4, S=4):
+        super(PSA_GNN, self).__init__()
+        self.S = S  # 将特征分成S个尺度
+        self.feature_dim = feature_dim // S
+
+        # 定义每个尺度对应的SE模块，注意通道维度现在是特征维度
+        self.se_blocks = nn.ModuleList([
+            nn.Sequential(
+                nn.AdaptiveAvgPool1d(1),  # 自适应平均池化到1维
+                nn.Linear(self.feature_dim, self.feature_dim // reduction, bias=False),  # 减少特征数
+                nn.ReLU(inplace=True),  # ReLU激活
+                nn.Linear(self.feature_dim // reduction, self.feature_dim, bias=False),  # 恢复特征数
+                nn.Sigmoid()  # Sigmoid激活函数，输出注意力权重
+            ) for i in range(S)
+        ])
+
+        self.softmax = nn.Softmax(dim=1)  # 对每个尺度的注意力权重进行归一化
+
+    def forward(self, x):
+        b, n = x.size()  # x的形状为 (batch_size, 特征维度)
+
+        # 将输入的特征维度分成S份
+        SPC_out = x.view(b, self.S, n // self.S)
+
+        # 对每个尺度应用SE模块，获得注意力权重
+        se_out = [se(SPC_out[:, idx, :]) for idx, se in enumerate(self.se_blocks)]
+        SE_out = torch.stack(se_out, dim=1)
+
+        # 应用Softmax归一化注意力权重
+        softmax_out = self.softmax(SE_out)
+
+        # 应用注意力权重并合并多尺度特征
+        PSA_out = SPC_out * softmax_out
+        PSA_out = torch.sum(PSA_out, dim=1)  # 沿尺度维度合并特征
+
+        return PSA_out
+

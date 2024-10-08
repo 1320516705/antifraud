@@ -11,10 +11,11 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 import torch.nn as nn
 from sklearn.preprocessing import LabelEncoder, QuantileTransformer
 from dgl.dataloading import MultiLayerFullNeighborSampler
-from dgl.dataloading import DataLoader as NodeDataLoader
 from torch.optim.lr_scheduler import MultiStepLR
-from .gtan_model import GraphAttnModel
-from . import *
+from dgl.dataloading import DataLoader as NodeDataLoader
+
+from methods.gtan_GCNet import early_stopper, load_lpa_subtensor
+from methods.gtan_GCNet.gtan_model_GCNet import GraphAttnModel
 
 
 def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features):

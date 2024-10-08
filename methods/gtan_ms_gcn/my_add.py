@@ -236,11 +236,3 @@ class SKConv(nn.Module):
         fea_v = (feas * attention_vectors).sum(dim=1)
         return fea_v
 
-
-if __name__ == "__main__":
-    x = torch.randn(16, 64, 256, 256)
-    sk = SKConv(in_ch=64, M=3, G=1, r=2)
-    out = sk(x)
-    print("输入特征张量的形状:", x.shape)
-    print("输出特征张量的形状:", out.shape)
-    # in_ch 数据输入维度，M为分指数，G为Conv2d层的组数，基本设置为1，r用来进行求线性层输出通道的。

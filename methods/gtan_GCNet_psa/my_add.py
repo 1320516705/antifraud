@@ -150,33 +150,6 @@ class GlobalContextBlock(nn.Module):
         return out
 
 
-# def main():
-#     # 假设我们有3种特征：Target, Location, Type，每种特征有10维
-#     target = torch.randn(10)
-#     location = torch.randn(10)
-#     type_feat = torch.randn(10)
-#
-#     # 将三种特征拼接成一个 (3, 10) 的张量
-#     x = torch.stack([target, location, type_feat], dim=0)
-#
-#     # 定义一个 GlobalContextBlock 实例
-#     ratio = 0.5  # 隐藏层的特征维度为输入特征维度的0.5倍
-#     pooling_type = 'att'  # 使用注意力机制作为池化方式
-#     fusion_types = ('channel_mul', 'channel_add')  # 同时使用通道相乘和通道相加的融合方式
-#     gcb = GlobalContextBlock(inplanes=10, ratio=ratio, pooling_type=pooling_type, fusion_types=fusion_types)
-#
-#     # 将输入特征张量传递给 GlobalContextBlock
-#     out = gcb(x)
-#
-#     # 输出结果的形状和结果
-#     print("输入特征张量的形状:", x.shape)
-#     print("输出特征张量的形状:", out.shape)
-#     print("输出特征张量:", out)
-#
-#
-# if __name__ == "__main__":
-#     main()
-
 
 # 输入特征张量的形状: torch.Size([16, 64, 256, 256])
 # 输出特征张量的形状: torch.Size([16, 64, 256, 256])
@@ -237,10 +210,126 @@ class SKConv(nn.Module):
         return fea_v
 
 
-if __name__ == "__main__":
-    x = torch.randn(16, 64, 256, 256)
-    sk = SKConv(in_ch=64, M=3, G=1, r=2)
-    out = sk(x)
-    print("输入特征张量的形状:", x.shape)
-    print("输出特征张量的形状:", out.shape)
-    # in_ch 数据输入维度，M为分指数，G为Conv2d层的组数，基本设置为1，r用来进行求线性层输出通道的。
+# if __name__ == "__main__":
+#     x = torch.randn(16, 64, 256, 256)
+#     sk = SKConv(in_ch=64, M=3, G=1, r=2)
+#     out = sk(x)
+#     print("输入特征张量的形状:", x.shape)
+#     print("输出特征张量的形状:", out.shape)
+#     # in_ch 数据输入维度，M为分指数，G为Conv2d层的组数，基本设置为1，r用来进行求线性层输出通道的。
+
+
+
+# 定义适用于 GNN 的 PSA 模块
+
+
+def get_max_s(in_feats):
+    """计算 n 的最大除数（不包括 n 本身），仅在 1 到 10 的范围内查找"""
+    for i in range(10, 0, -1):
+        if in_feats % i == 0 and i != in_feats:
+            return i
+    return 1  # 默认返回 1，处理特殊情况
+
+
+class GTANWithPSA(nn.Module):
+    def __init__(self, in_feats, out_feats):
+        super(GTANWithPSA, self).__init__()
+        self.in_feats = in_feats
+        self.out_feats = out_feats
+        self.S = get_max_s(in_feats)  # 分成 S 个子空间
+        # self.transformer_conv = TransformerConv(in_feats, out_feats)
+        self.fc = nn.Linear(in_feats // self.S, out_feats// self.S )
+        self.fc2 = nn.Linear(out_feats// self.S, out_feats)
+
+    def forward(self, h):  # h:torch.Size([128, 256])
+        # Step 1: GTAN 的 TransformerConv 消息传递
+        # Step 2: 将节点特征分割成多个子空间
+        h_split = torch.chunk(h, self.S, dim=1)  # h_split[0]:torch.Size([128, 32])
+        # Step 3: 对每个子空间应用注意力权重
+        weights = [F.softmax(self.fc(h_i), dim=1) for h_i in h_split]  # weights[0]:torch.Size([128, 32])
+
+        h_fused = sum(w * h_i for w, h_i in zip(weights, h_split))
+        h_fused=self.fc2(h_fused)
+
+        # Step 4: 输出最终的特征
+        return h_fused
+
+
+
+import matplotlib.pyplot as plt
+import os
+def plot_loss_accuracy(train_losses, val_losses, train_accuracies, val_accuracies, file_name):
+    epochs = range(len(train_losses))
+    prefix = './fig/'
+    if not os.path.exists(prefix):
+        os.makedirs(prefix)
+    plt.figure(figsize=(12, 5))
+
+    # 损失曲线
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, train_losses, 'b', label='Train Loss')
+    plt.plot(epochs, val_losses, 'r', label='Val Loss')
+    plt.title('Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+
+    # 准确率曲线
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, train_accuracies, 'b', label='Train Accuracy')
+    plt.plot(epochs, val_accuracies, 'r', label='Val Accuracy')
+    plt.title('Accuracy')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig(prefix + file_name)
+    plt.close()
+
+
+import os
+import matplotlib.pyplot as plt
+
+
+def plot_results(results, save_path='N_layers_experiment.png'):
+    prefix = './fig/'
+    if not os.path.exists(prefix):
+        os.makedirs(prefix)
+
+    plt.figure(figsize=(8, 6))
+
+    # 绘制 AUC, AP 和 F1 的曲线
+    # plt.plot(results['batch_size'], results['AUC'], marker='o', label='AUC', color='r')
+    # plt.plot(results['batch_size'], results['AP'], marker='^', label='AP', color='b')
+    # plt.plot(results['batch_size'], results['F1'], marker='s', label='F1', color='g')
+
+    # 添加横纵坐标标签和标题
+    # plt.xlabel('Batch Size')
+    # plt.ylabel('Score')
+    # plt.title('Performance vs. Batch Size')
+
+    # 绘制 AUC, AP 和 F1 的曲线
+    plt.plot(results['hid_dim'], results['AUC'], marker='o', label='AUC', color='r')
+    plt.plot(results['hid_dim'], results['AP'], marker='^', label='AP', color='b')
+    plt.plot(results['hid_dim'], results['F1'], marker='s', label='F1', color='g')
+
+    # 添加横纵坐标标签和标题
+    # plt.xlabel('Batch Size')
+    plt.xlabel('N_layers')
+    plt.ylabel('Score')
+    # plt.title('Performance vs. Batch Size')
+    plt.title('Performance vs. N_layers')
+
+    # 设置图例
+    plt.legend()
+
+    # 保存图片
+    plt.savefig(prefix + save_path)
+    print(f"Plot saved as {prefix + save_path}")
+
+    # 显示图像
+    plt.show()
+
+
+

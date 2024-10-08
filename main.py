@@ -1,16 +1,14 @@
 import os
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-from config import Config
 from feature_engineering.data_engineering import data_engineer_benchmark, span_data_2d, span_data_3d
 import logging
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
-import sys
-import pickle
-import dgl
-from scipy.io import loadmat
 import yaml
+# from methods.gtan_GCNet_psa.gtan_main import load_gtan_data, gtan_main
+from methods.gtan_GCNet_psa.gtan_main_hid_dim import load_gtan_data, gtan_main_hid_dim
+from methods.gtan_GCNet_psa.gtan_main_n_layers import gtan_main_n_layers
 
 logger = logging.getLogger(__name__)
 # sys.path.append("..")
@@ -77,78 +75,13 @@ def base_load_data(args: dict):
 
 
 def main(args):
-    if args['method'] == 'mcnn':
-        from methods.mcnn.mcnn_main import mcnn_main
-        base_load_data(args)
-        mcnn_main(
-            args['trainfeature'],
-            args['trainlabel'],
-            args['testfeature'],
-            args['testlabel'],
-            epochs=args['epochs'],
-            batch_size=args['batch_size'],
-            lr=args['lr'],
-            device=args['device']
-        )
-    elif args['method'] == 'stan_2d':
-        from methods.stan.stan_2d_main import stan_main
-        base_load_data(args)
-        stan_main(
-            args['trainfeature'],
-            args['trainlabel'],
-            args['testfeature'],
-            args['testlabel'],
-            mode='2d',
-            epochs=args['epochs'],
-            batch_size=args['batch_size'],
-            attention_hidden_dim=args['attention_hidden_dim'],
-            lr=args['lr'],
-            device=args['device']
-        )
-    elif args['method'] == 'stan':
-        from methods.stan.stan_main import stan_main
-        base_load_data(args)
-        stan_main(
-            args['trainfeature'],
-            args['trainlabel'],
-            args['testfeature'],
-            args['testlabel'],
-            mode='3d',
-            epochs=args['epochs'],
-            batch_size=args['batch_size'],
-            attention_hidden_dim=args['attention_hidden_dim'],
-            lr=args['lr'],
-            device=args['device']
-        )
 
-    elif args['method'] == 'stagn':
-        from methods.stagn.stagn_main import stagn_main, load_stagn_data
-        features, labels, g = load_stagn_data(args)
-        stagn_main(
-            features,
-            labels,
-            args['test_size'],
-            g,
-            mode='2d',
-            epochs=args['epochs'],
-            attention_hidden_dim=args['attention_hidden_dim'],
-            lr=args['lr'],
-            device=args['device']
-        )
-    elif args['method'] == 'gtan':
-        from methods.gtan.gtan_main import gtan_main, load_gtan_data
-        from methods.gtan.my_add import centrality
+    if args['method'] == 'gtan':
         feat_data, labels, train_idx, test_idx, g, cat_features = load_gtan_data(
             args['dataset'], args['test_size'])  # feat_data = ={DataFrame:(77881,126)是节点特征，labels = {Tensor:(77881,)}是标签，train_idx = {list: 62304}是训练集索引，test_idx = {list: 15577}是测试集索引，g是图，cat_features = {list: 3} ['Target', 'Location', 'Type' ]
-        centrality(g)
-        gtan_main(
+        gtan_main_n_layers(
             feat_data, g, train_idx, test_idx, labels, args, cat_features)
-    elif args['method'] == 'rgtan':
-        from methods.rgtan.rgtan_main import rgtan_main, loda_rgtan_data
-        feat_data, labels, train_idx, test_idx, g, cat_features, neigh_features = loda_rgtan_data(
-            args['dataset'], args['test_size'])
-        rgtan_main(feat_data, g, train_idx, test_idx, labels, args,
-                   cat_features, neigh_features, nei_att_head=args['nei_att_heads'][args['dataset']])
+
     else:
         raise NotImplementedError("Unsupported method. ")
 

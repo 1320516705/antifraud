@@ -6,6 +6,7 @@ from dgl import function as fn
 from dgl.base import DGLError
 from dgl.nn.functional import edge_softmax
 import numpy as np
+
 cat_features = ["Target",
                 "Type",
                 "Location"]
@@ -347,6 +348,9 @@ class GraphAttnModel(nn.Module):
         label_embed = self.layers[1](h) + self.layers[2](label_embed)
         label_embed = self.layers[3](label_embed)
         h = h + label_embed  # residual
+
+        # for l in range(self.n_layers):
+        #     h = self.output_drop(self.layers[l+4](blocks[l], h))
 
         for l in range(self.n_layers):
             h = self.output_drop(self.layers[l+4](blocks[l], h))

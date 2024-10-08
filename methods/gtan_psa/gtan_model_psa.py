@@ -6,6 +6,9 @@ from dgl import function as fn
 from dgl.base import DGLError
 from dgl.nn.functional import edge_softmax
 import numpy as np
+
+from methods.gtan_psa.my_add import GTANWithPSA
+
 cat_features = ["Target",
                 "Type",
                 "Location"]
@@ -328,6 +331,7 @@ class GraphAttnModel(nn.Module):
         else:
             self.layers.append(nn.Linear(self.hidden_dim *
                                self.heads[-1], self.n_classes))
+        self.psa = GTANWithPSA(self.hidden_dim * self.heads[-1], self.hidden_dim * self.heads[-1])
 
     def forward(self, blocks, features, labels, n2v_feat=None):
         """
@@ -347,10 +351,18 @@ class GraphAttnModel(nn.Module):
         label_embed = self.layers[1](h) + self.layers[2](label_embed)
         label_embed = self.layers[3](label_embed)
         h = h + label_embed  # residual
+        # print("*********h.shape***********")
+        # print(h.shape)  # h[11944, 25]
+
+        # h = self.restore_dim(h)
 
         for l in range(self.n_layers):
-            h = self.output_drop(self.layers[l+4](blocks[l], h))
-
+            h = self.output_drop(self.layers[l+4](blocks[l], h))  # h:torch.Size([128, 256])
+        # print("*********gtan_model_psa:h.shape***********")
+        # print(h.shape)
+        h = self.psa(h)
+        print("*********最后h.shape***********")
+        print(h.shape)
         logits = self.layers[-1](h)
 
         return logits
