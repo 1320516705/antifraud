@@ -1,0 +1,79 @@
+Training fold 1
+In epoch:000|batch:0000, train_loss:0.806977, train_ap:0.1581, train_acc:0.3828, train_auc:0.4468
+In epoch:000|batch:0010, train_loss:1.963205, train_ap:0.1337, train_acc:0.4062, train_auc:0.4510
+In epoch:000|batch:0020, train_loss:1.433889, train_ap:0.1657, train_acc:0.8203, train_auc:0.5607
+In epoch:000|batch:0030, train_loss:1.109034, train_ap:0.1704, train_acc:0.8672, train_auc:0.4997
+In epoch:000|batch:0040, train_loss:0.947256, train_ap:0.1645, train_acc:0.8516, train_auc:0.4751
+In epoch:000|batch:0050, train_loss:0.843886, train_ap:0.3569, train_acc:0.8359, train_auc:0.5737
+In epoch:000|batch:0060, train_loss:0.775870, train_ap:0.1531, train_acc:0.8359, train_auc:0.4259
+In epoch:000|batch:0070, train_loss:0.724198, train_ap:0.1333, train_acc:0.8594, train_auc:0.4576
+In epoch:000|batch:0080, train_loss:0.688818, train_ap:0.1663, train_acc:0.8594, train_auc:0.3924
+In epoch:000|batch:0090, train_loss:0.659818, train_ap:0.1693, train_acc:0.8203, train_auc:0.4352
+In epoch:000|batch:0100, train_loss:0.633103, train_ap:0.1358, train_acc:0.8672, train_auc:0.4425
+In epoch:000|batch:0000, val_loss:0.003874, val_ap:0.2390, val_acc:0.8125, val_auc:0.4696
+In epoch:000|batch:0010, val_loss:0.003472, val_ap:0.4538, val_acc:0.8125, val_auc:0.6262
+In epoch:000|batch:0020, val_loss:0.003309, val_ap:0.2434, val_acc:0.8906, val_auc:0.6266
+In epoch:000|batch:0030, val_loss:0.003315, val_ap:0.1871, val_acc:0.8594, val_auc:0.5381
+In epoch:000|batch:0040, val_loss:0.003293, val_ap:0.2405, val_acc:0.8125, val_auc:0.5080
+In epoch:000|batch:0050, val_loss:0.003316, val_ap:0.1774, val_acc:0.8594, val_auc:0.5960
+In epoch:000|batch:0060, val_loss:0.003287, val_ap:0.2785, val_acc:0.8594, val_auc:0.7013
+In epoch:000|batch:0070, val_loss:0.003267, val_ap:0.1609, val_acc:0.8359, val_auc:0.4533
+In epoch:000|batch:0080, val_loss:0.003245, val_ap:0.1847, val_acc:0.8594, val_auc:0.5995
+In epoch:000|batch:0090, val_loss:0.003258, val_ap:0.2393, val_acc:0.8125, val_auc:0.6222
+In epoch:000|batch:0100, val_loss:0.003246, val_ap:0.3517, val_acc:0.7891, val_auc:0.6247
+Best val_loss is: 0.0032559
+In test batch:0000
+In test batch:0010
+In test batch:0020
+In test batch:0030
+In test batch:0040
+In test batch:0050
+In test batch:0060
+In test batch:0070
+In test batch:0080
+In test batch:0090
+In test batch:0100
+In test batch:0110
+In test batch:0120
+In test batch:0130
+In test batch:0140
+Training fold 2
+In epoch:000|batch:0000, train_loss:0.615383, train_ap:0.0843, train_acc:0.6953, train_auc:0.3579
+In epoch:000|batch:0010, train_loss:1.698607, train_ap:0.1553, train_acc:0.6406, train_auc:0.4318
+In epoch:000|batch:0020, train_loss:1.219060, train_ap:0.2097, train_acc:0.8516, train_auc:0.5756
+In epoch:000|batch:0030, train_loss:0.985751, train_ap:0.1822, train_acc:0.8516, train_auc:0.5480
+In epoch:000|batch:0040, train_loss:0.855960, train_ap:0.2719, train_acc:0.8672, train_auc:0.6641
+In epoch:000|batch:0050, train_loss:0.776790, train_ap:0.1157, train_acc:0.8672, train_auc:0.4181
+In epoch:000|batch:0060, train_loss:0.717962, train_ap:0.1756, train_acc:0.8516, train_auc:0.5447
+In epoch:000|batch:0070, train_loss:0.682726, train_ap:0.1869, train_acc:0.8516, train_auc:0.5080
+In epoch:000|batch:0080, train_loss:0.648521, train_ap:0.0959, train_acc:0.8906, train_auc:0.4330
+In epoch:000|batch:0090, train_loss:0.625710, train_ap:0.3212, train_acc:0.8047, train_auc:0.6866
+In epoch:000|batch:0100, train_loss:0.606314, train_ap:0.2199, train_acc:0.8438, train_auc:0.5454
+In epoch:000|batch:0000, val_loss:0.002736, val_ap:0.2254, val_acc:0.8906, val_auc:0.5802
+In epoch:000|batch:0010, val_loss:0.003152, val_ap:0.1643, val_acc:0.8281, val_auc:0.4854
+In epoch:000|batch:0020, val_loss:0.003303, val_ap:0.1046, val_acc:0.8906, val_auc:0.4348
+In epoch:000|batch:0030, val_loss:0.003311, val_ap:0.1642, val_acc:0.8516, val_auc:0.4925
+In epoch:000|batch:0040, val_loss:0.003245, val_ap:0.1235, val_acc:0.8672, val_auc:0.3990
+In epoch:000|batch:0050, val_loss:0.003254, val_ap:0.1541, val_acc:0.8750, val_auc:0.5056
+In epoch:000|batch:0060, val_loss:0.003239, val_ap:0.2592, val_acc:0.8125, val_auc:0.4315
+In epoch:000|batch:0070, val_loss:0.003252, val_ap:0.2033, val_acc:0.7812, val_auc:0.4711
+In epoch:000|batch:0080, val_loss:0.003237, val_ap:0.1324, val_acc:0.8516, val_auc:0.4283
+In epoch:000|batch:0090, val_loss:0.003225, val_ap:0.1306, val_acc:0.8672, val_auc:0.4690
+In epoch:000|batch:0100, val_loss:0.003220, val_ap:0.1256, val_acc:0.8594, val_auc:0.3894
+Best val_loss is: 0.0032463
+In test batch:0000
+In test batch:0010
+In test batch:0020
+In test batch:0030
+In test batch:0040
+In test batch:0050
+In test batch:0060
+In test batch:0070
+In test batch:0080
+In test batch:0090
+In test batch:0100
+In test batch:0110
+In test batch:0120
+In test batch:0130
+In test batch:0140
+NN out of fold AP is: 0.14670400426361221
