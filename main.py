@@ -9,6 +9,9 @@ import yaml
 # from methods.gtan_GCNet_psa.gtan_main import load_gtan_data, gtan_main
 from methods.gtan_GCNet_psa.gtan_main_hid_dim import load_gtan_data, gtan_main_hid_dim
 from methods.gtan_GCNet_psa.gtan_main_n_layers import gtan_main_n_layers
+from methods.gtan_GCNet_psa.gtan_main_batch_size import gtan_main_batch_size
+from methods.gtan_psa_multi.gtan_main_psa_multi import gtan_main
+
 
 logger = logging.getLogger(__name__)
 # sys.path.append("..")
@@ -79,7 +82,7 @@ def main(args):
     if args['method'] == 'gtan':
         feat_data, labels, train_idx, test_idx, g, cat_features = load_gtan_data(
             args['dataset'], args['test_size'])  # feat_data = ={DataFrame:(77881,126)是节点特征，labels = {Tensor:(77881,)}是标签，train_idx = {list: 62304}是训练集索引，test_idx = {list: 15577}是测试集索引，g是图，cat_features = {list: 3} ['Target', 'Location', 'Type' ]
-        gtan_main_n_layers(
+        gtan_main(
             feat_data, g, train_idx, test_idx, labels, args, cat_features)
 
     else:

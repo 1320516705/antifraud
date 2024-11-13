@@ -94,20 +94,21 @@ class TransEmbedding(nn.Module):
         #support['labels'] = self.label_table(df['labels'])
         return support
 
-    def forward(self, df):
-        support = self.forward_emb(df)
+    def forward(self, df):  # df = {dict: 3} {'Target': tensor([238,8,0,...,15,0,0]),'Location':tensor([2,0,0,.12,12,0]),'Type': tensor([33,5,0,...,10, 0, 0])}
+        support = self.forward_emb(df)  # support = {dict: 3} {'Target': tensor([[-0.6434,]...[,1.0358]], 'Location': tensor([[-0.3648,]...[-0.0962]]), 'Type': tensor([[ 0.8478,]...[,0.6512]])}
         output = 0
-        for i, k in enumerate(support.keys()):
+        for i, k in enumerate(support.keys()):   # i是索引，k是特征列的名称
             # if k =='time_span':
             #    print(df[k].shape)
-            support[k] = self.dropout(support[k])
-            support[k] = self.forward_mlp[i](support[k])
+            support[k] = self.dropout(support[k])  # 应用dropout操作
+            support[k] = self.forward_mlp[i](support[k])  # (forward_mlp): ModuleList((0-2): 3 x Linear(in_features=126, out_features=126, bias=True)）,support[k]:{Tensor:(2321,126)}
 
-            # 将特征通过GlobalContextBlock处理
-            support[k] = self.global_context_blocks[k](support[k].unsqueeze(0)).squeeze(0)
-
-            output = output + support[k]
-        return output
+            # support[k]:{Tensor:(2321,126)}
+            # support[k].unsqueeze(0)：{Tensor:(1,2321,126)}
+            support[k] = self.global_context_blocks[k](support[k].unsqueeze(0)).squeeze(0)  # support[k].unsqueeze(0).squeeze(0) 的形状为 (2321, 126)。
+            # 将处理后的3种“类别特征”的值相加
+            output = output + support[k]   # output ={Tensor:(2321,126)}->output ={Tensor:(2321,126)},也就是将指定特征列的向量相加
+        return output    # output ={Tensor:(2321,126)}
 
 
 class TransformerConv(nn.Module):
@@ -375,7 +376,7 @@ class GraphAttnModel(nn.Module):
         else:
             self.layers.append(nn.Linear(self.hidden_dim *
                                self.heads[-1], self.n_classes))
-        self.psa = GTANWithPSA(self.hidden_dim * self.heads[-1], self.hidden_dim * self.heads[-1])
+        self.psa = GTANWithPSA(self.hidden_dim * self.heads[-1], self.hidden_dim * self.heads[-1])  # GTANWithPSA(64*4, 64*4)
     # train_batch_logits = model(blocks, batch_inputs, lpa_labels, batch_work_inputs)
     def forward(self, blocks, features, labels, n2v_feat=None):
         """
@@ -404,7 +405,7 @@ class GraphAttnModel(nn.Module):
             h = self.output_drop(self.layers[l+4](blocks[l], h))  # h:torch.Size([128, 256])
         # print("*********gtan_model_psa:h.shape***********")
         # print(h.shape)
-        h = self.psa(h)
+        h = self.psa(h)# h:torch.Size([128, 256])
         # print("*********最后h.shape***********")
         # print(h.shape)
         logits = self.layers[-1](h)

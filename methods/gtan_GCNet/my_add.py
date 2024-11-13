@@ -184,57 +184,57 @@ import torch
 import torch.nn as nn
 
 
-class SKConv(nn.Module):
-    def __init__(self, in_ch, M=3, r=4, L=32):
-        super().__init__()
-        d = max(int(in_ch / r), L)  # 计算d的值，确保d不小于L，以免信息损失
-        self.M = M  # 分支数量
-        self.in_ch = in_ch  # 输入通道数
-
-        # 使用线性层代替卷积层
-        self.fc_list = nn.ModuleList([
-            nn.Linear(in_ch, in_ch) for _ in range(M)
-        ])
-
-        self.fc = nn.Linear(in_ch, d)  # 全连接层，将特征向量降维到d
-        self.fcs = nn.ModuleList([
-            nn.Linear(d, in_ch) for _ in range(M)
-        ])
-        self.softmax = nn.Softmax(dim=1)  # Softmax激活，用于归一化注意力向量
-
-    def forward(self, x):
-        # x 的形状应为 [batch_size, channels]
-        feas = None
-        for i, fc in enumerate(self.fc_list):
-            # 对输入x应用每个分支的线性操作
-            fea = fc(x).unsqueeze_(dim=1)
-            if i == 0:
-                feas = fea
-            else:
-                # 将不同分支的特征拼接在一起
-                feas = torch.cat([feas, fea], dim=1)
-
-        # 将所有分支的特征相加，得到统一特征
-        fea_U = torch.sum(feas, dim=1)
-        # 通过全连接层fc将fea_U映射到向量fea_z
-        fea_z = self.fc(fea_U)
-
-        attention_vectors = None
-        for i, fc in enumerate(self.fcs):
-            # 为每个分支生成注意力向量
-            vector = fc(fea_z).unsqueeze_(dim=1)
-            if i == 0:
-                attention_vectors = vector
-            else:
-                # 将不同分支的注意力向量拼接在一起
-                attention_vectors = torch.cat([attention_vectors, vector], dim=1)
-
-        # 对注意力向量应用Softmax激活，进行归一化处理
-        attention_vectors = self.softmax(attention_vectors)
-
-        # 将注意力向量应用于拼接后的特征，通过加权求和得到最终的输出特征图
-        fea_v = (feas * attention_vectors).sum(dim=1)
-        return fea_v
+# class SKConv(nn.Module):
+#     def __init__(self, in_ch, M=3, r=4, L=32):
+#         super().__init__()
+#         d = max(int(in_ch / r), L)  # 计算d的值，确保d不小于L，以免信息损失
+#         self.M = M  # 分支数量
+#         self.in_ch = in_ch  # 输入通道数
+#
+#         # 使用线性层代替卷积层
+#         self.fc_list = nn.ModuleList([
+#             nn.Linear(in_ch, in_ch) for _ in range(M)
+#         ])
+#
+#         self.fc = nn.Linear(in_ch, d)  # 全连接层，将特征向量降维到d
+#         self.fcs = nn.ModuleList([
+#             nn.Linear(d, in_ch) for _ in range(M)
+#         ])
+#         self.softmax = nn.Softmax(dim=1)  # Softmax激活，用于归一化注意力向量
+#
+#     def forward(self, x):
+#         # x 的形状应为 [batch_size, channels]
+#         feas = None
+#         for i, fc in enumerate(self.fc_list):
+#             # 对输入x应用每个分支的线性操作
+#             fea = fc(x).unsqueeze_(dim=1)
+#             if i == 0:
+#                 feas = fea
+#             else:
+#                 # 将不同分支的特征拼接在一起
+#                 feas = torch.cat([feas, fea], dim=1)
+#
+#         # 将所有分支的特征相加，得到统一特征
+#         fea_U = torch.sum(feas, dim=1)
+#         # 通过全连接层fc将fea_U映射到向量fea_z
+#         fea_z = self.fc(fea_U)
+#
+#         attention_vectors = None
+#         for i, fc in enumerate(self.fcs):
+#             # 为每个分支生成注意力向量
+#             vector = fc(fea_z).unsqueeze_(dim=1)
+#             if i == 0:
+#                 attention_vectors = vector
+#             else:
+#                 # 将不同分支的注意力向量拼接在一起
+#                 attention_vectors = torch.cat([attention_vectors, vector], dim=1)
+#
+#         # 对注意力向量应用Softmax激活，进行归一化处理
+#         attention_vectors = self.softmax(attention_vectors)
+#
+#         # 将注意力向量应用于拼接后的特征，通过加权求和得到最终的输出特征图
+#         fea_v = (feas * attention_vectors).sum(dim=1)
+#         return fea_v
 
 
 # if __name__ == "__main__":
@@ -245,41 +245,41 @@ class SKConv(nn.Module):
 #     print("输出特征张量的形状:", out.shape)
 #     # in_ch 数据输入维度，M为分指数，G为Conv2d层的组数，基本设置为1，r用来进行求线性层输出通道的。
 
-class PSA_GNN(nn.Module):
-    def __init__(self, feature_dim=126, reduction=4, S=4):
-        super(PSA_GNN, self).__init__()
-        self.S = S  # 将特征分成S个尺度
-        self.feature_dim = feature_dim // S
-
-        # 定义每个尺度对应的SE模块，注意通道维度现在是特征维度
-        self.se_blocks = nn.ModuleList([
-            nn.Sequential(
-                nn.AdaptiveAvgPool1d(1),  # 自适应平均池化到1维
-                nn.Linear(self.feature_dim, self.feature_dim // reduction, bias=False),  # 减少特征数
-                nn.ReLU(inplace=True),  # ReLU激活
-                nn.Linear(self.feature_dim // reduction, self.feature_dim, bias=False),  # 恢复特征数
-                nn.Sigmoid()  # Sigmoid激活函数，输出注意力权重
-            ) for i in range(S)
-        ])
-
-        self.softmax = nn.Softmax(dim=1)  # 对每个尺度的注意力权重进行归一化
-
-    def forward(self, x):
-        b, n = x.size()  # x的形状为 (batch_size, 特征维度)
-
-        # 将输入的特征维度分成S份
-        SPC_out = x.view(b, self.S, n // self.S)
-
-        # 对每个尺度应用SE模块，获得注意力权重
-        se_out = [se(SPC_out[:, idx, :]) for idx, se in enumerate(self.se_blocks)]
-        SE_out = torch.stack(se_out, dim=1)
-
-        # 应用Softmax归一化注意力权重
-        softmax_out = self.softmax(SE_out)
-
-        # 应用注意力权重并合并多尺度特征
-        PSA_out = SPC_out * softmax_out
-        PSA_out = torch.sum(PSA_out, dim=1)  # 沿尺度维度合并特征
-
-        return PSA_out
+# class PSA_GNN(nn.Module):
+#     def __init__(self, feature_dim=126, reduction=4, S=4):
+#         super(PSA_GNN, self).__init__()
+#         self.S = S  # 将特征分成S个尺度
+#         self.feature_dim = feature_dim // S
+#
+#         # 定义每个尺度对应的SE模块，注意通道维度现在是特征维度
+#         self.se_blocks = nn.ModuleList([
+#             nn.Sequential(
+#                 nn.AdaptiveAvgPool1d(1),  # 自适应平均池化到1维
+#                 nn.Linear(self.feature_dim, self.feature_dim // reduction, bias=False),  # 减少特征数
+#                 nn.ReLU(inplace=True),  # ReLU激活
+#                 nn.Linear(self.feature_dim // reduction, self.feature_dim, bias=False),  # 恢复特征数
+#                 nn.Sigmoid()  # Sigmoid激活函数，输出注意力权重
+#             ) for i in range(S)
+#         ])
+#
+#         self.softmax = nn.Softmax(dim=1)  # 对每个尺度的注意力权重进行归一化
+#
+#     def forward(self, x):
+#         b, n = x.size()  # x的形状为 (batch_size, 特征维度)
+#
+#         # 将输入的特征维度分成S份
+#         SPC_out = x.view(b, self.S, n // self.S)
+#
+#         # 对每个尺度应用SE模块，获得注意力权重
+#         se_out = [se(SPC_out[:, idx, :]) for idx, se in enumerate(self.se_blocks)]
+#         SE_out = torch.stack(se_out, dim=1)
+#
+#         # 应用Softmax归一化注意力权重
+#         softmax_out = self.softmax(SE_out)
+#
+#         # 应用注意力权重并合并多尺度特征
+#         PSA_out = SPC_out * softmax_out
+#         PSA_out = torch.sum(PSA_out, dim=1)  # 沿尺度维度合并特征
+#
+#         return PSA_out
 

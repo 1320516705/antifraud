@@ -94,6 +94,7 @@ class TransEmbedding(nn.Module):
         return output  # output ={Tensor:(2321,126)}
 
 
+# 输入：{Tensor:(2321,126)}、输出：Tensor: (681,256)}
 class TransformerConv(nn.Module):
 
     def __init__(self,
@@ -142,7 +143,7 @@ class TransformerConv(nn.Module):
             self.skip_feat = None
         if gated:  # gated=True
             self.gate = nn.Linear(
-                3*self._out_feats*self._num_heads, 1, bias=bias)  # # (输入：3*64*4=768, 输出1, bias=True)
+                3*self._out_feats*self._num_heads, 1, bias=bias)  # (输入：3*64*4=768, 输出1, bias=True)，前面有个3的原因：目标节点原始特征、目标节点聚合后特征、两者特征之差，将这3者沿最后一个维度拼接了。
         else:
             self.gate = None
         if layer_norm:  # layer_norm=True
@@ -154,7 +155,7 @@ class TransformerConv(nn.Module):
     # 调用代码： h = self.output_drop(self.layers[l+4](blocks[l], h))# h ={Tensor:(2321,126)} => h = {Tensor: (681,256)}
     # graph：当前batch根据“种子节点”决定的子图 [Block(num src nodes=2321, num dst nodes=681, num edges=7506), Block(num src nodes=681, num dst nodes=128.,num edges=1408)]
     # feat：是合并了【数字特征】+【类别特征】+【标签】的特征,feat ={Tensor:(2321,126)}
-    def forward(self, graph, feat, get_attention=False):  # feat ={Tensor:(2321,126)}
+    def forward(self, graph, feat, get_attention=False, distance=1):  # feat ={Tensor:(2321,126)}
         """
         Description: Transformer Graph Convolution
         :param graph: input graph
@@ -191,6 +192,7 @@ class TransformerConv(nn.Module):
         #  view 方法重新调整形状
         # _num_heads 是注意力头的数量
         # _out_feats 是每个头的输出特征维度
+        #  self.lin_query = nn.Linear(self._in_src_feats, self._out_feats*self._num_heads, bias=bias)  # (输入：126, 输出64*4=256, bias=True)
         q_src = self.lin_query(h_src).view(-1, self._num_heads, self._out_feats)  # q src={Tensor:(2321, 4, 64)}
         k_dst = self.lin_key(h_dst).view(-1, self._num_heads, self._out_feats)  # k src={Tensor:(681, 4, 64)}
         v_src = self.lin_value(h_src).view(-1, self._num_heads, self._out_feats)  # v src={Tensor:(2321, 4, 64)}
@@ -203,6 +205,16 @@ class TransformerConv(nn.Module):
 
         # Step 1. dot product
         graph.apply_edges(fn.u_dot_v('ft', 'ft', 'a'))  # 对图中的每条边， 计算每条边连接的两个节点特征的点积。存储结果在边的数据属性 'a' 中,这代表了原始的注意力相关度量
+
+        print("graph.edata['a']1111111111")
+        print(graph.edata['a'].shape)
+        if distance == 2:
+            # 计算衰减系数：例如指数衰减，可以根据需要选择不同的衰减方式
+            graph.edata['decay'] = torch.exp(-self.decay_factor * distance)  # 自定义的衰减因子
+            graph.edata['a'] *= graph.edata['decay']  # 应用衰减因子
+        print("graph.edata['a']222222222222")
+        print(graph.edata['a'].shape)
+
 # 公式3
         # Step 2. edge softmax 去计算注意力分数，公式3
         # **用于执行幂运算
@@ -216,12 +228,12 @@ class TransformerConv(nn.Module):
 
         # 将目标节点更新后的表示（agg_u）重新塑形，以便后续处理。这里假设使用了多头注意力机制，因此将输出特征维度乘以头数（self._num_heads）
         # rst = {Tensor: (681,256)}是聚合特征
-        rst = graph.dstdata['agg_u'].reshape(-1,self._out_feats*self._num_heads)  # 第二维：每个特征向量的长度*头的数量
+        rst = graph.dstdata['agg_u'].reshape(-1,self._out_feats*self._num_heads)  # 第二维：每个特征向量的长度*头的数量（4*64=256）
 # 公式4
         if self.skip_feat is not None:  # skip_feat=True
             skip_feat = self.skip_feat(feat[:graph.number_of_dst_nodes()])  # skip_feat = {Tensor: (681,256)}提取前 `graph.number_of_dst_nodes()` 个节点的特征，记为 `skip_feat`
             if self.gate is not None:
-                gate = torch.sigmoid(  # gate = {Tensor: (681,1)}
+                gate = torch.sigmoid(  # self.gate：(输入：3*64*4=768, 输出1, bias=True)
                     self.gate(  # 将 `skip_feat`、`rst` 和 `skip_feat - rst` 沿着最后一个维度拼接起来，然后经过 `torch.sigmoid` 函数处理，得到门控值 `gate`
                         torch.concat([skip_feat, rst, skip_feat - rst], dim=-1)))  # skip_feat - rst：跳跃连接特征和变换后特征之间的差异，提供了关于输入和输出特征之间差异的信息，有助于模型理解变换前后的变化程度
                 rst = gate * skip_feat + (1 - gate) * rst  # rst = {Tensor: (681,256)}。通过门控值 `gate` 对 `skip_feat` 和 `rst` 进行加权相加，更新 `rst`
@@ -229,7 +241,7 @@ class TransformerConv(nn.Module):
                 rst = skip_feat + rst
 
         if self.layer_norm is not None:
-            rst = self.layer_norm(rst)
+            rst = self.layer_norm(rst)  # self.layer_norm = nn.LayerNorm(self._out_feats*self._num_heads)  # 64*4=256
 
         if self.activation is not None:
             rst = self.activation(rst)  # rst = {Tensor: (681,256)}
@@ -330,19 +342,23 @@ class GraphAttnModel(nn.Module):
         # 7层
         for l in range(0, (self.n_layers - 1)):
             # due to multi-head, the in_dim = num_hidden * num_heads
-            self.layers.append(TransformerConv(in_feats=self.hidden_dim * self.heads[l - 1],
-                                               out_feats=self.hidden_dim,
-                                               num_heads=self.heads[l],
-                                               skip_feat=skip_feat,
-                                               gated=gated,
-                                               layer_norm=layer_norm,
-                                               activation=self.activation))
+            self.layers.append(TransformerConv(in_feats=self.hidden_dim * self.heads[l - 1],  # in_feats = 64*4=256
+                                               out_feats=self.hidden_dim, # hidden_dim = {int} 64
+                                               num_heads=self.heads[l],  # heads = [4, 4]
+                                               skip_feat=skip_feat,  # skip_feat=True
+                                               gated=gated,  # gated=True
+                                               layer_norm=layer_norm,  # layer_norm=True
+                                               activation=self.activation))  # activation=nn.PReLU()
         # layers:6
         # 0-4
         if post_proc:  # post_proc=True
-            self.layers.append(nn.Sequential(nn.Linear(self.hidden_dim * self.heads[-1], self.hidden_dim * self.heads[-1]),  # （64*4=256，64*4=256）
+            # hidden_dim=args['hid_dim']//4,  # hid_dim: 256 =>hidden_dim: 64
+            # heads = {list: 2} [4, 4]
+            # nn.Sequential(nn.Linear(256,256),nn.BatchNorm1d(256),nn.PReLU(),nn.Dropout(0.1),nn.Linear(256,2))
+            # nn.Sequential是一个容器，用于按顺序包装一系列的子模块。数据会按照这些子模块的顺序依次通过它们
+            self.layers.append(nn.Sequential(nn.Linear(self.hidden_dim * self.heads[-1], self.hidden_dim * self.heads[-1]),  # nn.Linear(64*4=256，64*4=256)
                                              nn.BatchNorm1d(
-                                                 self.hidden_dim * self.heads[-1]),
+                                                 self.hidden_dim * self.heads[-1]),  # nn.BatchNorm1d(64*4=256) 归一化
                                              nn.PReLU(),
                                              nn.Dropout(self.drop),  # self.drop=0.1
                                              nn.Linear(self.hidden_dim * self.heads[-1], self.n_classes)))  # （64*4=256,2）
@@ -379,9 +395,9 @@ class GraphAttnModel(nn.Module):
         # l会取 0 和 1
         for l in range(self.n_layers):  # n_layers: 2
             # 针对的是GraphAttnModel中的（4）和（5），观测可以发现，每次传入的h是上一次更新后的h，所以（4）和（5），即2个TransformerConv是串行的，且下一个的输入是上一个的输出
-            h = self.output_drop(self.layers[l+4](blocks[l], h))  # h ={Tensor:(2321,126)} => h = {Tensor: (681,256)}
+            h = self.output_drop(self.layers[l+4](blocks[l], h))  # h ={Tensor:(2321,126)} => h = {Tensor: (681,256)} => h = {Tensor: (128,256)}
 
         # 走GraphAttnModel中的（6），5个子层达到的效果：256->2
-        logits = self.layers[-1](h)
+        logits = self.layers[-1](h) # nn.Linear(self.hidden_dim * self.heads[-1], self.n_classes)))  # （64*4=256,2）
 
         return logits  # logits = {Tensor: (128,2)}

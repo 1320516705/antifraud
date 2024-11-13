@@ -84,7 +84,9 @@ class PositionalEncoding(torch.nn.Module):
 import torch
 import torch.nn as nn
 
+# 输出维度==输入维度
 class GlobalContextBlock(nn.Module):
+    # 调用：GlobalContextBlock(inplanes=126, ratio=0.5, pooling_type='att',fusion_types=('channel_mul', 'channel_add'))
     def __init__(self, inplanes, ratio, pooling_type="att", fusion_types=('channel_mul')) -> None:
         super().__init__()
         # 定义有效的融合类型
@@ -100,12 +102,18 @@ class GlobalContextBlock(nn.Module):
 
         # 使用1x1卷积（线性变换）处理不同的特征维度
         if pooling_type == 'att':
-            self.conv_mask = nn.Linear(inplanes, 1)
+            self.conv_mask = nn.Linear(inplanes, 1)  # nn.Linear(126, 1)
             self.softmax = nn.Softmax(dim=1)
         else:
             self.avg_pool = lambda x: torch.mean(x, dim=1, keepdim=True)
 
         # 通道加操作
+        # nn.Sequential(
+        #                 nn.Linear(126, 63),
+        #                 nn.LayerNorm(63),
+        #                 nn.ReLU(inplace=True),
+        #                 nn.Linear(63, 126)
+        #             )
         if 'channel_add' in fusion_types:
             self.channel_add_conv = nn.Sequential(
                 nn.Linear(self.inplanes, self.planes),
@@ -117,6 +125,12 @@ class GlobalContextBlock(nn.Module):
             self.channel_add_conv = None
 
         # 通道乘操作
+        # nn.Sequential(
+        #                 nn.Linear(126, 63),
+        #                 nn.LayerNorm(63),
+        #                 nn.ReLU(inplace=True),
+        #                 nn.Linear(63, 126)
+        #             )
         if 'channel_mul' in fusion_types:
             self.channel_mul_conv = nn.Sequential(
                 nn.Linear(self.inplanes, self.planes),
@@ -128,19 +142,20 @@ class GlobalContextBlock(nn.Module):
             self.channel_mul_conv = None
 
     # 定义空间池化函数
-    def spatial_pool(self, x):
+    # 调用：GlobalContextBlock(inplanes=126, ratio=0.5, pooling_type='att',fusion_types=('channel_mul', 'channel_add'))
+    def spatial_pool(self, x):  # x:{Tensor:(1,2321,126)}
         if self.pooling_type == 'att':
-            context_mask = self.conv_mask(x)  # (3, 1)
+            context_mask = self.conv_mask(x)  # x:{Tensor:(1,2321,126)} -> context_mask:{Tensor:(1,2321,1)}
             context_mask = self.softmax(context_mask)  # 在特征维度上应用softmax
-            context = torch.sum(context_mask * x, dim=0, keepdim=True)  # 加权求和，得到全局上下文 (1, inplanes)
+            context = torch.sum(context_mask * x, dim=0, keepdim=True)  # context_mask * x：torch.Size([1, 2321, 126])，由于只有一个 batch（batch 大小为 1），求和后的结果仍然会保留 batch 维度，但该维度的大小为 1，加权求和，得到全局上下文 (1, 126)
         else:
             context = self.avg_pool(x)  # 对所有特征取平均值
         return context
 
     # 定义前向传播函数
     def forward(self, x):
-        context = self.spatial_pool(x)
-        out = x
+        context = self.spatial_pool(x)  # x:{Tensor:(1,2321,126)}，contextx:{Tensor:(1,126)}
+        out = x  # out:{Tensor:(1,2321,126)}
         if self.channel_mul_conv is not None:
             channel_mul_term = torch.sigmoid(self.channel_mul_conv(context))  # 放缩权重
             out = out * channel_mul_term  # 与 x 进行相乘

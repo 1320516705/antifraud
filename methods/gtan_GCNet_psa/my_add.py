@@ -248,7 +248,7 @@ class GTANWithPSA(nn.Module):
         # Step 3: 对每个子空间应用注意力权重
         weights = [F.softmax(self.fc(h_i), dim=1) for h_i in h_split]  # weights[0]:torch.Size([128, 32])
 
-        h_fused = sum(w * h_i for w, h_i in zip(weights, h_split))
+        h_fused = sum(w * h_i for w, h_i in zip(weights, h_split))  # h_fused ：[128, 32]
         h_fused=self.fc2(h_fused)
 
         # Step 4: 输出最终的特征
@@ -292,7 +292,7 @@ import os
 import matplotlib.pyplot as plt
 
 
-def plot_results(results, save_path='N_layers_experiment.png'):
+def plot_results(results, save_path='batch_size_experiment.png'):
     prefix = './fig/'
     if not os.path.exists(prefix):
         os.makedirs(prefix)
@@ -316,10 +316,10 @@ def plot_results(results, save_path='N_layers_experiment.png'):
 
     # 添加横纵坐标标签和标题
     # plt.xlabel('Batch Size')
-    plt.xlabel('N_layers')
+    plt.xlabel('batch_size')
     plt.ylabel('Score')
     # plt.title('Performance vs. Batch Size')
-    plt.title('Performance vs. N_layers')
+    plt.title('Performance vs. batch_size')
 
     # 设置图例
     plt.legend()

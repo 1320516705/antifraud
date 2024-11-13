@@ -84,6 +84,9 @@ class PositionalEncoding(torch.nn.Module):
 import torch
 import torch.nn as nn
 
+# 调用:'Target': GlobalContextBlock(inplanes=126, ratio=0.5, pooling_type='att',fusion_types=('channel_mul', 'channel_add')),
+#     'Location': GlobalContextBlock(inplanes=126, ratio=0.5, pooling_type='att',fusion_types=('channel_mul', 'channel_add')),
+#     'Type': GlobalContextBlock(inplanes=126, ratio=0.5, pooling_type='att',fusion_types=('channel_mul', 'channel_add'))
 class GlobalContextBlock(nn.Module):
     def __init__(self, inplanes, ratio, pooling_type="att", fusion_types=('channel_mul')) -> None:
         super().__init__()
@@ -138,7 +141,7 @@ class GlobalContextBlock(nn.Module):
         return context
 
     # 定义前向传播函数
-    def forward(self, x):
+    def forward(self, x):  # x:{Tensor:(1,2321,126)}
         context = self.spatial_pool(x)
         out = x
         if self.channel_mul_conv is not None:
@@ -257,27 +260,28 @@ def get_max_s(in_feats):
             return i
     return 1  # 默认返回 1，处理特殊情况
 
-
+# 调用：GTANWithPSA(64*4, 64*4)
+# 输出维度==输入维度
 class GTANWithPSA(nn.Module):
     def __init__(self, in_feats, out_feats):
         super(GTANWithPSA, self).__init__()
-        self.in_feats = in_feats
-        self.out_feats = out_feats
-        self.S = get_max_s(in_feats)  # 分成 S 个子空间
-        self.fc = nn.Linear(in_feats // self.S, out_feats// self.S )
-        self.fc2 = nn.Linear(out_feats// self.S, out_feats)
+        self.in_feats = in_feats  # self.in_feats：64*4=256
+        self.out_feats = out_feats  # self.out_feats：64*4=256
+        self.S = get_max_s(in_feats)  # 分成 S 个子空间（8）
+        self.fc = nn.Linear(in_feats // self.S, out_feats// self.S )  # self.fc = nn.Linear(32，32)
+        self.fc2 = nn.Linear(out_feats// self.S, out_feats)  # self.fc2 = nn.Linear(32,256)
 
     def forward(self, h):  # h:torch.Size([128, 256])
         # Step 2: 将节点特征分割成多个子空间
-        h_split = torch.chunk(h, self.S, dim=1)  # h_split[0]:torch.Size([128, 32])
+        h_split = torch.chunk(h, self.S, dim=1)  # h_split[0]:torch.Size([128, 32]),h_split 是一个包含 8 个张量的列表，每个张量的形状为 [128, 32]
         # Step 3: 对每个子空间应用注意力权重
-        weights = [F.softmax(self.fc(h_i), dim=1) for h_i in h_split]  # weights[0]:torch.Size([128, 32])
+        weights = [F.softmax(self.fc(h_i), dim=1) for h_i in h_split]  # weights[0]:torch.Size([128, 32]),weights 是一个包含 8 个张量的列表，每个张量的形状为 [128, 32]
         # len(weights):8
-        h_fused = sum(w * h_i for w, h_i in zip(weights, h_split))
-        h_fused=self.fc2(h_fused)
+        h_fused = sum(w * h_i for w, h_i in zip(weights, h_split))  # h_fused： [128, 32]
+        h_fused=self.fc2(h_fused)  # h_fused：[128, 256]
 
         # Step 4: 输出最终的特征
-        return h_fused
+        return h_fused  # h_fused：[128, 256]
 
 
 

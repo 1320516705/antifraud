@@ -137,6 +137,7 @@ def gtan_main_n_layers(feat_df, graph, train_idx, test_idx, labels, args, cat_fe
                     train_batch_logits = model(
                         blocks, batch_inputs, lpa_labels, batch_work_inputs)
                     mask = batch_labels == 2
+                    # 去除了未分类的标签2
                     train_batch_logits = train_batch_logits[~mask]
                     batch_labels = batch_labels[~mask]
                     # batch_labels[mask] = 0
@@ -146,7 +147,7 @@ def gtan_main_n_layers(feat_df, graph, train_idx, test_idx, labels, args, cat_fe
                     optimizer.zero_grad()
                     train_loss.backward()
                     optimizer.step()
-                    lr_scheduler.step()
+                    lr_scheduler.step()  # 更新学习率调度器的状态
                     train_loss_list.append(train_loss.cpu().detach().numpy())
 
                     # 新增

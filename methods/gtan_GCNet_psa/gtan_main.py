@@ -66,10 +66,10 @@ def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features):
         output_file_path = output_file.name
         y_target = tmp
         args['batch_size'] = i
-        print("**********************************")
-        print(f'train_idx: {len(train_idx)}')
-        print(f'y_target: {len(y_target)}')
-        print(f'feat_df: {feat_df.shape}')
+        # print("**********************************")
+        # print(f'train_idx: {len(train_idx)}')
+        # print(f'y_target: {len(y_target)}')
+        # print(f'feat_df: {feat_df.shape}')
         for fold, (trn_idx, val_idx) in enumerate(kfold.split(feat_df.iloc[train_idx], y_target)):
             # print(f'Training fold {fold + 1}')
             output_file.write(f'Training fold {fold + 1}\n')

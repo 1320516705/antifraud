@@ -15,6 +15,7 @@ from dgl.dataloading import MultiLayerFullNeighborSampler
 from dgl.dataloading import DataLoader as NodeDataLoader
 from torch.optim.lr_scheduler import MultiStepLR
 from . import *
+from methods.temp.gtan_model_bak import GraphAttnModel
 
 
 

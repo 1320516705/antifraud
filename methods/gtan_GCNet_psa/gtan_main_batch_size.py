@@ -21,7 +21,7 @@ from .my_add import plot_results
 
 
 def gtan_main_batch_size(feat_df, graph, train_idx, test_idx, labels, args, cat_features):
-    batch_sizes = [8, 16, 32, 64, 128, 256, 512, 1024]  # 示例值，实际值根据你的实验设置
+    batch_sizes = [ 16, 32, 64, 128, 256, 512, 1024]  # 示例值，实际值根据你的实验设置
 
     # 用于存储每个 batch_size 的结果
     results = {
