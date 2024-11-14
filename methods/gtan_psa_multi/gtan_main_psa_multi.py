@@ -16,7 +16,8 @@ from dgl.dataloading import DataLoader as NodeDataLoader
 from . import early_stopper
 from .gtan_lpa import load_lpa_subtensor
 from .gtan_model_psa_multi import GraphAttnModel
-
+from tqdm import tqdm
+from .my_add import plot_results
 
 def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features):
     device = args['device']
@@ -36,8 +37,30 @@ def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features):
     y = labels
     labels = torch.from_numpy(y.values).long().to(device)
     loss_fn = nn.CrossEntropyLoss().to(device)
+
+    train_losses = []
+    train_accuracies = []
+    val_losses = []
+    val_accuracies = []
+    tmp = y_target
+    output_dir = './output/'
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    output_file = open(
+        output_dir + str(args['dataset']) + '_' + 'batchSize' + str(args['batch_size']) + '_' + 'hidDim' + str(
+            args['hid_dim']) + '_' + 'lr' + str(args['lr']) + '_' + 'wd' + str(args['wd']) + '_' + 'nLayers' + str(
+            args['n_layers']) + '.txt', 'w')
+    # 假设 output_file 已经按照给定的方式打开
+    output_file_path = output_file.name
+    y_target = tmp
+    # args['hid_dim'] = i
+    print("**********************************")
+    print(f'train_idx: {len(train_idx)}')
+    print(f'y_target: {len(y_target)}')
+    print(f'feat_df: {feat_df.shape}')
+
     for fold, (trn_idx, val_idx) in enumerate(kfold.split(feat_df.iloc[train_idx], y_target)):
-        print(f'Training fold {fold + 1}')
+        output_file.write(f'Training fold {fold + 1}\n')
         trn_ind, val_ind = torch.from_numpy(np.array(train_idx)[trn_idx]).long().to(
             device), torch.from_numpy(np.array(train_idx)[val_idx]).long().to(device)
 
@@ -85,11 +108,12 @@ def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features):
         earlystoper = early_stopper(
             patience=args['early_stopping'], verbose=True)
         start_epoch, max_epochs = 0, 2000
-        for epoch in range(start_epoch, args['max_epochs']):
+        for epoch in tqdm(range(start_epoch, args['max_epochs'])):
             train_loss_list = []
             # train_acc_list = []
             model.train()
-            for step, (input_nodes, seeds, blocks) in enumerate(train_dataloader):
+            for step, (input_nodes, seeds, blocks) in enumerate(
+                    tqdm(train_dataloader, desc='Training Batches', leave=False)):
                 batch_inputs, batch_work_inputs, batch_labels, lpa_labels = load_lpa_subtensor(num_feat, cat_feat, labels,
                                                                                                seeds, input_nodes, device)
                 # (|input|, feat_dim); null; (|batch|,); (|input|,)
@@ -118,8 +142,9 @@ def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features):
                     # if (len(np.unique(score)) == 1):
                     #     print("all same prediction!")
                     try:
-                        print('In epoch:{:03d}|batch:{:04d}, train_loss:{:4f}, '
-                              'train_ap:{:.4f}, train_acc:{:.4f}, train_auc:{:.4f}'.format(epoch, step,
+                        output_file.write(
+                            'In epoch:{:03d}|batch:{:04d}, train_loss:{:4f}, '
+                              'train_ap:{:.4f}, train_acc:{:.4f}, train_auc:{:.4f}\n'.format(epoch, step,
                                                                                            np.mean(
                                                                                                train_loss_list),
                                                                                            average_precision_score(
@@ -135,7 +160,8 @@ def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features):
             val_all_list = 0
             model.eval()
             with torch.no_grad():
-                for step, (input_nodes, seeds, blocks) in enumerate(val_dataloader):
+                for step, (input_nodes, seeds, blocks) in enumerate(
+                        tqdm(val_dataloader, desc='Validation Batches', leave=False)):
                     batch_inputs, batch_work_inputs, batch_labels, lpa_labels = load_lpa_subtensor(num_feat, cat_feat, labels,
                                                                                                    seeds, input_nodes, device)
 
@@ -159,8 +185,8 @@ def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features):
                         score = torch.softmax(val_batch_logits.clone().detach(), dim=1)[
                             :, 1].cpu().numpy()
                         try:
-                            print('In epoch:{:03d}|batch:{:04d}, val_loss:{:4f}, val_ap:{:.4f}, '
-                                  'val_acc:{:.4f}, val_auc:{:.4f}'.format(epoch,
+                            output_file.write('In epoch:{:03d}|batch:{:04d}, val_loss:{:4f}, val_ap:{:.4f}, '
+                                  'val_acc:{:.4f}, val_auc:{:.4f}\n'.format(epoch,
                                                                           step,
                                                                           val_loss_list/val_all_list,
                                                                           average_precision_score(
@@ -173,9 +199,9 @@ def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features):
             # val_acc_list/val_all_list, model)
             earlystoper.earlystop(val_loss_list/val_all_list, model)
             if earlystoper.is_earlystop:
-                print("Early Stopping!")
+                output_file.write("Early Stopping!")
                 break
-        print("Best val_loss is: {:.7f}".format(earlystoper.best_cv))
+        output_file.write("Best val_loss is: {:.7f}\n".format(earlystoper.best_cv))
         test_ind = torch.from_numpy(np.array(test_idx)).long().to(device)
         test_sampler = MultiLayerFullNeighborSampler(args['n_layers'])
         test_dataloader = NodeDataLoader(graph,
@@ -191,7 +217,8 @@ def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features):
         b_model = earlystoper.best_model.to(device)
         b_model.eval()
         with torch.no_grad():
-            for step, (input_nodes, seeds, blocks) in enumerate(test_dataloader):
+            for step, (input_nodes, seeds, blocks) in enumerate(
+                    tqdm(test_dataloader, desc='test Batches', leave=False)):
                 # print(input_nodes)
                 batch_inputs, batch_work_inputs, batch_labels, lpa_labels = load_lpa_subtensor(num_feat, cat_feat, labels,
                                                                                                seeds, input_nodes, device)
@@ -203,12 +230,12 @@ def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features):
                 test_batch_pred = torch.sum(torch.argmax(
                     test_batch_logits, dim=1) == batch_labels) / torch.tensor(batch_labels.shape[0])
                 if step % 10 == 0:
-                    print('In test batch:{:04d}'.format(step))
+                    output_file.write('In test batch:{:04d}\n'.format(step))
     mask = y_target == 2
     y_target[mask] = 0
     my_ap = average_precision_score(y_target, torch.softmax(
         oof_predictions, dim=1).cpu()[train_idx, 1])
-    print("NN out of fold AP is:", my_ap)
+    output_file.write("NN out of fold AP is: {}\n".format(my_ap))
     b_models, val_gnn_0, test_gnn_0 = earlystoper.best_model.to(
         'cpu'), oof_predictions, test_predictions
 
@@ -221,10 +248,15 @@ def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features):
     y_target = y_target[mask]
     test_score1 = test_score1[mask]
 
-    print("test AUC:", roc_auc_score(y_target, test_score))
-    print("test f1:", f1_score(y_target, test_score1, average="macro"))
-    print("test AP:", average_precision_score(y_target, test_score))
+    output_file.write("test AUC:{}\n".format(roc_auc_score(y_target, test_score)))
+    output_file.write("test f1:{}\n".format(f1_score(y_target, test_score1, average="macro")))
+    output_file.write("test AP:{}\n".format(average_precision_score(y_target, test_score)))
 
+    # print("test AUC:", roc_auc_score(y_target, test_score))
+    # print("test f1:", f1_score(y_target, test_score1, average="macro"))
+    # print("test AP:", average_precision_score(y_target, test_score))
+
+    output_file.close()
 
 def load_gtan_data(dataset: str, test_size: float):
     """

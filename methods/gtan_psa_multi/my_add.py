@@ -285,5 +285,81 @@ class GTANWithPSA(nn.Module):
 
 
 
+import matplotlib.pyplot as plt
+import os
+def plot_loss_accuracy(train_losses, val_losses, train_accuracies, val_accuracies, file_name):
+    epochs = range(len(train_losses))
+    prefix = './fig/'
+    if not os.path.exists(prefix):
+        os.makedirs(prefix)
+    plt.figure(figsize=(12, 5))
+
+    # 损失曲线
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, train_losses, 'b', label='Train Loss')
+    plt.plot(epochs, val_losses, 'r', label='Val Loss')
+    plt.title('Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+
+    # 准确率曲线
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, train_accuracies, 'b', label='Train Accuracy')
+    plt.plot(epochs, val_accuracies, 'r', label='Val Accuracy')
+    plt.title('Accuracy')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig(prefix + file_name)
+    plt.close()
+
+
+import os
+import matplotlib.pyplot as plt
+
+
+def plot_results(results, save_path='batch_size_experiment.png'):
+    prefix = './fig/'
+    if not os.path.exists(prefix):
+        os.makedirs(prefix)
+
+    plt.figure(figsize=(8, 6))
+
+    # 绘制 AUC, AP 和 F1 的曲线
+    # plt.plot(results['batch_size'], results['AUC'], marker='o', label='AUC', color='r')
+    # plt.plot(results['batch_size'], results['AP'], marker='^', label='AP', color='b')
+    # plt.plot(results['batch_size'], results['F1'], marker='s', label='F1', color='g')
+
+    # 添加横纵坐标标签和标题
+    # plt.xlabel('Batch Size')
+    # plt.ylabel('Score')
+    # plt.title('Performance vs. Batch Size')
+
+    # 绘制 AUC, AP 和 F1 的曲线
+    plt.plot(results['hid_dim'], results['AUC'], marker='o', label='AUC', color='r')
+    plt.plot(results['hid_dim'], results['AP'], marker='^', label='AP', color='b')
+    plt.plot(results['hid_dim'], results['F1'], marker='s', label='F1', color='g')
+
+    # 添加横纵坐标标签和标题
+    # plt.xlabel('Batch Size')
+    plt.xlabel('batch_size')
+    plt.ylabel('Score')
+    # plt.title('Performance vs. Batch Size')
+    plt.title('Performance vs. batch_size')
+
+    # 设置图例
+    plt.legend()
+
+    # 保存图片
+    plt.savefig(prefix + save_path)
+    print(f"Plot saved as {prefix + save_path}")
+
+    # 显示图像
+    plt.show()
+
+
 
 
