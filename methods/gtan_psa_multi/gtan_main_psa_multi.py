@@ -97,8 +97,8 @@ def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features):
                                drop=args['dropout'],
                                device=device,
                                gated=args['gated'],
-                               ref_df=feat_df.iloc[train_idx],
-                               cat_features=cat_feat).to(device)
+                               ref_df=feat_df.iloc[train_idx], # 所有训练集的特征，是分折之前的完整的训练集
+                               cat_features=cat_feat).to(device)  # 比较原始的那个字典值
         lr = args['lr'] * np.sqrt(args['batch_size']/1024)  # 0.00075
         optimizer = optim.Adam(model.parameters(), lr=lr,
                                weight_decay=args['wd'])
@@ -114,9 +114,13 @@ def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features):
             model.train()
             for step, (input_nodes, seeds, blocks) in enumerate(
                     tqdm(train_dataloader, desc='Training Batches', leave=False)):
+                # batch inputs ={Tensor:(2321,126)}
+                # batch work inputs = {dict: 3} {'Target': tensor([238,8,0,...,15,0,0]),'Location':tensor([2,0,0,.12,12,0]),'Type': tensor([33,5,0,...,10, 0, 0])}
+                # batch labels = {Tensor: (128,)}
+                # lpa_labels ={Tensor:(2321,)}
                 batch_inputs, batch_work_inputs, batch_labels, lpa_labels = load_lpa_subtensor(num_feat, cat_feat, labels,
                                                                                                seeds, input_nodes, device)
-                # (|input|, feat_dim); null; (|batch|,); (|input|,)
+                # blocks:[Block(num src nodes=2321, num dst nodes=681, num edges=7506), Block(num src nodes=681, num dst nodes=128.,num edges=1408)]
                 blocks = [block.to(device) for block in blocks]
                 train_batch_logits = model(
                     blocks, batch_inputs, lpa_labels, batch_work_inputs)

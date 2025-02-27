@@ -48,7 +48,10 @@ class PosEncoding(nn.Module):
             x = pos / self.base + self.sft
             return torch.sin(x)
 
-
+# 调用：self.n2v_mlp = TransEmbedding(ref_df, device=device, in_feats=in_feats, cat_features=cat_features)
+# ref_df:所有训练集的特征，是分折之前的完整的训练集
+# in_feats=feat_df.shape[1]=>126
+# cat_features:比较原始的那个字典值
 class TransEmbedding(nn.Module):
 
     def __init__(self, df=None, device='cpu', dropout=0.2, in_feats=82, cat_features=None):
@@ -157,9 +160,10 @@ class TransformerConv(nn.Module):
         else:
             self.layer_norm = None
         self.activation = activation  # activation=nn.PReLU()
+        self.decay_factor = nn.Parameter(torch.tensor(0.5))  # 将衰减因子作为学习的参数
 
     # 调用代码： h = self.output_drop(self.layers[l+4](blocks[l], h))# h ={Tensor:(2321,126)} => h = {Tensor: (681,256)}
-    # graph：当前batch根据“种子节点”决定的子图 [Block(num src nodes=2321, num dst nodes=681, num edges=7506), Block(num src nodes=681, num dst nodes=128.,num edges=1408)]
+    # graph：当前batch根据“种子节点”决定的子图 blocks:[Block(num src nodes=2321, num dst nodes=681, num edges=7506), Block(num src nodes=681, num dst nodes=128.,num edges=1408)]
     # feat：是合并了【数字特征】+【类别特征】+【标签】的特征,feat ={Tensor:(2321,126)}
     def forward(self, graph, feat, get_attention=False, distance=1):  # feat ={Tensor:(2321,126)}
         """
@@ -216,8 +220,12 @@ class TransformerConv(nn.Module):
         # print(graph.edata['a'].shape)
         if distance == 2:
             # 计算衰减系数：例如指数衰减，可以根据需要选择不同的衰减方式
-            graph.edata['decay'] = torch.exp(-self.decay_factor * distance)  # 自定义的衰减因子
-            graph.edata['a'] *= graph.edata['decay']  # 应用衰减因子
+            # graph.edata['decay'] = torch.exp(-self.decay_factor * distance)  # 自定义的衰减因子
+            # graph.edata['a'] *= graph.edata['decay']  # 应用衰减因子
+
+            decay = 1 - self.decay_factor * distance  # 线性衰减因子，确保不会小于0
+            decay = torch.clamp(decay, min=0.1)  # 防止衰减因子为0，最小值设为0.1
+            graph.edata['a'] *= decay  # 应用衰减因子
         # print("graph.edata['a']222222222222")
         # print(graph.edata['a'].shape)
 
@@ -258,7 +266,17 @@ class TransformerConv(nn.Module):
         # else:
         return rst  # rst = {Tensor: (681,256)}
 
-
+# 初始化：GraphAttnModel(in_feats=feat_df.shape[1],=>126
+#                                hidden_dim=args['hid_dim']//4,=>256/4=64
+#                                n_classes=2,
+#                                heads=[4]*args['n_layers'],  # [4,4]
+#                                activation=nn.PReLU(),
+#                                n_layers=args['n_layers'],=>2
+#                                drop=args['dropout'],
+#                                device=device,
+#                                gated=args['gated'],
+#                                ref_df=feat_df.iloc[train_idx], # 所有训练集的特征，是分折之前的完整的训练集
+#                                cat_features=cat_feat).to(device)  # 比较原始的那个字典值
 class GraphAttnModel(nn.Module):
     def __init__(self,
                  in_feats,
@@ -377,7 +395,7 @@ class GraphAttnModel(nn.Module):
             # print(h.shape)
             # print("**************features.shape*************")
             # print(features.shape)
-            h = self.psa(h)
+            h = h + self.psa(h)
 
         label_embed = self.input_drop(self.layers[0](labels))
         label_embed = self.layers[1](h) + self.layers[2](label_embed)
@@ -396,7 +414,7 @@ class GraphAttnModel(nn.Module):
             # print(res.shape)
             # print(res)
             # h = self.output_drop(self.layers[l + 4](blocks[l], h))  # h ={Tensor:(2321,126)} => h = {Tensor: (681,256)} => h = {Tensor: (128,256)}
-            h = self.output_drop(self.layers[l + 4](blocks[l], h, l+1))  # h ={Tensor:(2321,126)} => h = {Tensor: (681,256)} => h = {Tensor: (128,256)}
+             h = self.output_drop(self.layers[l + 4](blocks[l], h,False, l+1))  # h ={Tensor:(2321,126)} => h = {Tensor: (681,256)} => h = {Tensor: (128,256)}
 
         # 走GraphAttnModel中的（6），5个子层达到的效果：256->2
         logits = self.layers[-1](h)  # nn.Linear(self.hidden_dim * self.heads[-1], self.n_classes)))  # （64*4=256,2）

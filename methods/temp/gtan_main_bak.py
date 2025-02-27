@@ -93,6 +93,10 @@ def gtan_main(feat_df, graph, train_idx, test_idx, labels, args, cat_features):
             # train_acc_list = []
             model.train()
             for step, (input_nodes, seeds, blocks) in enumerate(train_dataloader):
+                # batch inputs ={Tensor:(2321,126)}
+                # batch work inputs = {dict: 3} {'Target': tensor([238,8,0,...,15,0,0]),'Location':tensor([2,0,0,.12,12,0]),'Type': tensor([33,5,0,...,10, 0, 0])}
+                # batch labels = {Tensor: (128,)}
+                # lpa_labels ={Tensor:(2321,)}
                 batch_inputs, batch_work_inputs, batch_labels, lpa_labels = load_lpa_subtensor(num_feat, cat_feat, labels,
                                                                                                seeds, input_nodes, device)
                 # (|input|, feat_dim); null; (|batch|,); (|input|,)

@@ -262,28 +262,78 @@ def get_max_s(in_feats):
 
 # 调用：GTANWithPSA(64*4, 64*4)
 # 输出维度==输入维度
+# class GTANWithPSA(nn.Module):
+#     def __init__(self, in_feats, out_feats):
+#         super(GTANWithPSA, self).__init__()
+#         self.in_feats = in_feats  # self.in_feats：64*4=256
+#         self.out_feats = out_feats  # self.out_feats：64*4=256
+#         self.S = get_max_s(in_feats)  # 分成 S 个子空间（8）
+#         self.fc = nn.Linear(in_feats // self.S, out_feats// self.S )  # self.fc = nn.Linear(32，32)
+#         self.fc2 = nn.Linear(out_feats// self.S, out_feats)  # self.fc2 = nn.Linear(32,256)
+#         self.relu = nn.ReLU()  # 激活函数
+#
+#     def forward(self, h):  # h:torch.Size([128, 256])
+#         # Step 2: 将节点特征分割成多个子空间
+#         h_split = torch.chunk(h, self.S, dim=1)  # h_split[0]:torch.Size([128, 32]),h_split 是一个包含 8 个张量的列表，每个张量的形状为 [128, 32]
+#         # Step 3: 对每个子空间应用注意力权重
+#         weights = [F.softmax(self.fc(h_i), dim=1) for h_i in h_split]  # weights[0]:torch.Size([128, 32]),weights 是一个包含 8 个张量的列表，每个张量的形状为 [128, 32]
+#         # len(weights):8
+#         h_fused = sum(w * h_i for w, h_i in zip(weights, h_split))  # h_fused： [128, 32]
+#         h_fused=self.fc2(h_fused)  # h_fused：[128, 256]
+#
+#         h_fused = self.relu(h_fused)  # 激活操作
+#
+#         # Step 4: 输出最终的特征
+#         return h_fused  # h_fused：[128, 256]
+
+
 class GTANWithPSA(nn.Module):
     def __init__(self, in_feats, out_feats):
         super(GTANWithPSA, self).__init__()
-        self.in_feats = in_feats  # self.in_feats：64*4=256
-        self.out_feats = out_feats  # self.out_feats：64*4=256
-        self.S = get_max_s(in_feats)  # 分成 S 个子空间（8）
-        self.fc = nn.Linear(in_feats // self.S, out_feats// self.S )  # self.fc = nn.Linear(32，32)
-        self.fc2 = nn.Linear(out_feats// self.S, out_feats)  # self.fc2 = nn.Linear(32,256)
 
-    def forward(self, h):  # h:torch.Size([128, 256])
-        # Step 2: 将节点特征分割成多个子空间
-        h_split = torch.chunk(h, self.S, dim=1)  # h_split[0]:torch.Size([128, 32]),h_split 是一个包含 8 个张量的列表，每个张量的形状为 [128, 32]
-        # Step 3: 对每个子空间应用注意力权重
-        weights = [F.softmax(self.fc(h_i), dim=1) for h_i in h_split]  # weights[0]:torch.Size([128, 32]),weights 是一个包含 8 个张量的列表，每个张量的形状为 [128, 32]
-        # len(weights):8
-        h_fused = sum(w * h_i for w, h_i in zip(weights, h_split))  # h_fused： [128, 32]
-        h_fused=self.fc2(h_fused)  # h_fused：[128, 256]
+        self.in_feats = in_feats  # 输入特征维度 [batch_size, in_feats]
+        self.out_feats = out_feats  # 输出特征维度 [batch_size, out_feats]
 
-        # Step 4: 输出最终的特征
-        return h_fused  # h_fused：[128, 256]
+        # 子空间数量（S），根据输入特征维度来决定
+        self.S = get_max_s(in_feats)  # S = 8，表示将特征划分成 8 个子空间
 
+        # 定义 S 个独立的全连接层，每个子空间使用一个独立的全连接层
+        self.fc_layers = nn.ModuleList([nn.Linear(in_feats // self.S, out_feats // self.S) for _ in range(self.S)])
 
+        # 定义 S 个不同的激活函数
+        self.relu_layers = nn.ModuleList([nn.ReLU() if i % 2 == 0 else nn.LeakyReLU() for i in range(self.S)])
 
+        # 最终的融合层，输出特征维度为 out_feats
+        self.fc2 = nn.Linear(out_feats // self.S, out_feats)
 
+        # Softmax 层，用于计算每个子空间的注意力权重
+        self.softmax = nn.Softmax(dim=1)
+
+    def forward(self, h):
+        """
+        h: 输入特征，形状为 [batch_size, in_feats]
+        """
+        # Step 1: 将输入特征 h 划分成 S 个子空间
+        h_split = torch.chunk(h, self.S, dim=1)  # h_split 是一个包含 S 个张量的列表，每个张量形状为 [batch_size, in_feats // S]
+
+        # Step 2: 对每个子空间进行独立处理，应用不同的全连接层和激活函数
+        weights = []
+        for i in range(self.S):
+            # 对每个子空间应用独立的全连接层
+            fc_out = self.fc_layers[i](h_split[i])  # fc_out 形状为 [batch_size, out_feats // S]
+
+            # 对每个子空间应用不同的激活函数
+            fc_out = self.relu_layers[i](fc_out)  # fc_out 形状为 [batch_size, out_feats // S]
+
+            # 使用 Softmax 计算注意力权重
+            weight = self.softmax(fc_out)  # weight 形状为 [batch_size, out_feats // S]
+            weights.append(weight)
+
+        # Step 3: 加权融合所有子空间的特征
+        h_fused = sum(w * h_i for w, h_i in zip(weights, h_split))  # h_fused 形状为 [batch_size, in_feats // S]
+
+        # Step 4: 通过全连接层得到最终特征表示
+        h_fused = self.fc2(h_fused)  # h_fused 形状为 [batch_size, out_feats]
+
+        return h_fused  # 输出形状为 [batch_size, out_feats]
 
